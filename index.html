@@ -22,6 +22,7 @@ button.g{background:transparent;color:var(--tx);border:1px solid var(--bd)}
 .n b{font-size:64px;line-height:1}
 #ban{display:none;background:var(--ok);color:#fff;padding:12px;border-radius:12px;text-align:center;font-weight:600;margin-bottom:10px}
 input[type=range]{width:100%}
+#lv{height:10px;background:var(--bd);border-radius:5px;margin:8px 0;overflow:hidden}#lv i{display:block;height:100%;width:0;background:var(--ok)}
 </style></head><body>
 <h1>📿 持咒計數</h1>
 
@@ -35,7 +36,7 @@ input[type=range]{width:100%}
 
 <div class="c"><h2>② 錄低你自己嘅聲</h2>
 <div class="r"><button id="rc">🎙 錄一遍</button></div>
-<div class="m" id="ts">按錄音,安靜環境下清楚念一遍,停低就會自動完成。</div></div>
+<div id="lv"><i></i></div><div class="m" id="ts">按錄音,清楚念一遍。念完停低會自動完成,或者再撳一次掣手動停止。綠色條郁動就係聽到你把聲。</div></div>
 
 <div class="c"><h2>③ 開始持咒</h2>
 <div id="ban">🙏 圓滿 108 遍!</div>
@@ -54,7 +55,7 @@ let S={count:0,rounds:1,tpl:null,thr:60,hold:600,mn:"",tx:""};
 try{Object.assign(S,JSON.parse(localStorage.getItem("mc")||"{}"))}catch(e){}
 const save=()=>{try{localStorage.setItem("mc",JSON.stringify(S))}catch(e){}};
 let ac,an,stream,timer,mode=null,frames=[],inSeg=false,sp=0,sil=0,floor=.005,ignore=0,t0=0,lastV=0,refUrl=null;
-const B=12;
+const B=12;let recT=0;function stopRec(){if(inSeg){lastV=performance.now();sil=0;done()}if(mode==="rec"){closeMic();$("rc").textContent="🎙 錄一遍";$("ts").textContent="冇聽到清楚嘅聲音。請靠近啲、大聲啲再試,見到綠色條郁動就係有聽到。"}}
 function render(){$("ct").textContent=S.count;$("rd").textContent=S.rounds;$("pg").style.strokeDashoffset=615.8*(1-S.count/108);
 $("v1").textContent=(S.thr/100).toFixed(2);$("v2").textContent=S.hold;$("th").value=S.thr;$("hd").value=S.hold;$("mn").value=S.mn;$("tx").value=S.tx;
 if(S.tpl)$("ts").textContent="✅ 已記住你嘅聲(約 "+(S.tpl.dur/1000).toFixed(1)+" 秒)。想改可以重錄。"}
@@ -64,7 +65,7 @@ function closeMic(){clearInterval(timer);timer=null;mode=null;inSeg=false;frames
 function grab(){const t=new Float32Array(an.fftSize);an.getFloatTimeDomainData(t);let s=0;for(const x of t)s+=x*x;const f=new Float32Array(an.frequencyBinCount);an.getFloatFrequencyData(f);const hz=ac.sampleRate/an.fftSize,b=[];for(let i=0;i<B;i++){const lo=Math.floor(150*Math.pow(26,i/B)/hz),hi=Math.max(lo+1,Math.floor(150*Math.pow(26,(i+1)/B)/hz));let a=0;for(let k=lo;k<hi;k++)a+=Math.max(f[k],-100);b.push(a/(hi-lo))}return{rms:Math.sqrt(s/t.length),b}}
 function feat(fr){const o=[];for(let c=0;c<3;c++){const a=fr.slice(Math.floor(fr.length*c/3),Math.floor(fr.length*(c+1)/3));for(let i=0;i<B;i++)o.push(a.reduce((s,v)=>s+v[i],0)/(a.length||1))}const m=o.reduce((a,b)=>a+b,0)/o.length;return o.map(v=>v-m)}
 function cos(a,b){let d=0,x=0,y=0;for(let i=0;i<a.length;i++){d+=a[i]*b[i];x+=a[i]*a[i];y+=b[i]*b[i]}return d/Math.sqrt(x*y||1)}
-function tick(){const{rms,b}=grab(),now=performance.now(),v=rms>Math.max(floor*3.5,.012)&&now>ignore;
+function tick(){const{rms,b}=grab(),now=performance.now(),v=rms>Math.max(floor*3,.006)&&now>ignore;const lv=document.querySelector("#lv i");if(lv)lv.style.width=Math.min(100,rms*600)+"%";if(mode==="rec"){$("ts").textContent=inSeg?"🔴 錄緊…念完停低,或者再撳一次掣停止":"🔴 等你開口…";if(now-recT>20000){stopRec();return}}
 if(!v&&!inSeg)floor=floor*.95+rms*.05;
 if(v){sil=0;sp++;lastV=now;if(!inSeg&&sp>=3){inSeg=true;frames=[];t0=now}if(inSeg)frames.push(b)}
 else{sp=0;if(inSeg){sil++;frames.push(b);if(sil*30>=S.hold)done()}}}
@@ -74,7 +75,7 @@ else if(mode==="cnt"&&S.tpl){const r=dur/S.tpl.dur,sim=cos(f,S.tpl.f),ok=r>.6&&r
 function add(n){S.count=Math.max(0,Math.min(108,S.count+n));save();render();
 if(n>0&&S.count===108){bell(3);try{navigator.vibrate&&navigator.vibrate([300,150,300,150,300])}catch(e){}closeMic();$("ban").style.display="block";$("go").textContent="再來一圈";$("st").textContent="已完成 108 遍";}
 else if(n>0&&S.count%27===0){bell(1);try{navigator.vibrate&&navigator.vibrate(200)}catch(e){}}}
-$("rc").onclick=async()=>{closeMic();try{await openMic();mode="rec";timer=setInterval(tick,30);$("ts").textContent="🔴 請念一遍…";$("rc").textContent="錄音中"}catch(e){$("rc").textContent="🎙 錄一遍";$("ts").textContent="用唔到咪高峰("+(e&&e.name||"錯誤")+")。請容許麥克風權限,並用 Safari 或 Chrome 直接打開呢個連結,唔好用 app 內置瀏覽器。"}};
+$("rc").onclick=async()=>{if(mode==="rec"){stopRec();return}closeMic();try{await openMic();mode="rec";recT=performance.now();timer=setInterval(tick,30);$("ts").textContent="🔴 等你開口…";$("rc").textContent="⏹ 停止"}catch(e){$("rc").textContent="🎙 錄一遍";$("ts").textContent="用唔到咪高峰("+(e&&e.name||"錯誤")+")。請容許麥克風權限,並用 Safari 或 Chrome 直接打開呢個連結,唔好用 app 內置瀏覽器。"}};
 $("go").onclick=async()=>{
 if(S.count>=108){S.count=0;S.rounds++;$("ban").style.display="none";save();render()}
 if(mode==="cnt"){closeMic();$("go").textContent="繼續計數";$("st").textContent="已暫停";return}
