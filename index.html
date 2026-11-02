@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-HK"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>持咒計數</title>
+<style>
+:root{--bg:#faf6ee;--card:#fff;--tx:#2b2418;--mu:#7a6e5a;--ac:#b8862b;--ok:#3f7d4e;--bd:#e6dcc6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#17140f;--card:#221e16;--tx:#f1e9d8;--mu:#a89d86;--ac:#e0b04e;--ok:#6fbf84;--bd:#383122}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#17140f;--card:#221e16;--tx:#f1e9d8;--mu:#a89d86;--ac:#e0b04e;--ok:#6fbf84;--bd:#383122}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:16px/1.5 -apple-system,"PingFang HK","Noto Sans HK",sans-serif;padding:14px;max-width:480px;margin:auto}
+h1{font-size:20px;margin:6px 0 12px;text-align:center}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:14px;margin-bottom:12px}
+.c h2{font-size:15px;margin:0 0 8px;color:var(--ac)}
+input[type=text],textarea,select{width:100%;padding:9px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit;margin-bottom:8px}
+.r{display:flex;gap:8px;flex-wrap:wrap}
+button{flex:1;min-width:90px;padding:11px;border:0;border-radius:12px;background:var(--ac);color:#fff;font:inherit;font-weight:600}
+button.g{background:transparent;color:var(--tx);border:1px solid var(--bd)}
+.m{color:var(--mu);font-size:13px}
+.ring{position:relative;width:220px;height:220px;margin:4px auto}
+.ring svg{transform:rotate(-90deg)}
+.ring .n{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.n b{font-size:64px;line-height:1}
+#ban{display:none;background:var(--ok);color:#fff;padding:12px;border-radius:12px;text-align:center;font-weight:600;margin-bottom:10px}
+input[type=range]{width:100%}
+</style></head><body>
+<h1>📿 持咒計數</h1>
+
+<div class="c"><h2>① 標準讀音</h2>
+<input type="text" id="mn" placeholder="咒語名稱(例如:大悲咒)">
+<textarea id="tx" rows="2" placeholder="貼上咒文(用作朗讀參考)"></textarea>
+<select id="lg"><option value="zh-HK">粵語朗讀</option><option value="zh-CN">普通話朗讀</option></select>
+<div class="r"><button id="pl">▶ 聽標準讀音</button><button class="g" id="up">上載師父錄音</button></div>
+<input type="file" id="fi" accept="audio/*" hidden>
+<div class="m" id="rf">冇上載錄音時,會用手機語音朗讀。建議上載你信任嘅師父或法師錄音做標準。</div></div>
+
+<div class="c"><h2>② 錄低你自己嘅聲</h2>
+<div class="r"><button id="rc">🎙 錄一遍</button></div>
+<div class="m" id="ts">按錄音,安靜環境下清楚念一遍,停低就會自動完成。</div></div>
+
+<div class="c"><h2>③ 開始持咒</h2>
+<div id="ban">🙏 圓滿 108 遍!</div>
+<div class="ring"><svg width="220" height="220"><circle cx="110" cy="110" r="98" fill="none" stroke="var(--bd)" stroke-width="12"/><circle id="pg" cx="110" cy="110" r="98" fill="none" stroke="var(--ac)" stroke-width="12" stroke-linecap="round" stroke-dasharray="615.8" stroke-dashoffset="615.8"/></svg>
+<div class="n"><b id="ct">0</b><span class="m">/ 108 · 第 <span id="rd">1</span> 圈</span></div></div>
+<div class="m" style="text-align:center" id="st">未開始</div>
+<div class="r" style="margin-top:10px"><button id="go">開始計數</button><button class="g" id="mi">−1</button><button class="g" id="pl1">+1</button><button class="g" id="rs">重設</button></div>
+<details style="margin-top:10px"><summary class="m">進階設定</summary>
+<div class="m">相似度門檻:<span id="v1"></span></div><input type="range" id="th" min="30" max="90" value="60">
+<div class="m">每遍之間停頓(毫秒):<span id="v2"></span></div><input type="range" id="hd" min="300" max="1500" step="50" value="600">
+<div class="m" id="dbg">每遍之間請稍為停一停,系統先分到係一遍。如果少數,調低門檻;如果多數,調高。</div></details></div>
+
+<script>
+const $=i=>document.getElementById(i);
+let S={count:0,rounds:1,tpl:null,thr:60,hold:600,mn:"",tx:""};
+try{Object.assign(S,JSON.parse(localStorage.getItem("mc")||"{}"))}catch(e){}
+const save=()=>{try{localStorage.setItem("mc",JSON.stringify(S))}catch(e){}};
+let ac,an,stream,timer,mode=null,frames=[],inSeg=false,sp=0,sil=0,floor=.005,ignore=0,t0=0,lastV=0,refUrl=null;
+const B=12;
+function render(){$("ct").textContent=S.count;$("rd").textContent=S.rounds;$("pg").style.strokeDashoffset=615.8*(1-S.count/108);
+$("v1").textContent=(S.thr/100).toFixed(2);$("v2").textContent=S.hold;$("th").value=S.thr;$("hd").value=S.hold;$("mn").value=S.mn;$("tx").value=S.tx;
+if(S.tpl)$("ts").textContent="✅ 已記住你嘅聲(約 "+(S.tpl.dur/1000).toFixed(1)+" 秒)。想改可以重錄。"}
+function bell(n){ac=ac||new(window.AudioContext||window.webkitAudioContext)();for(let i=0;i<n;i++){const t=ac.currentTime+i*1;[1,2.76].forEach((m,j)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=660*m;g.gain.setValueAtTime(j?.15:.5,t);g.gain.exponentialRampToValueAtTime(.001,t+1.6);o.connect(g).connect(ac.destination);o.start(t);o.stop(t+1.7)})}ignore=performance.now()+n*1000+900}
+async function openMic(){if(stream)return;stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});ac=ac||new(window.AudioContext||window.webkitAudioContext)();await ac.resume();an=ac.createAnalyser();an.fftSize=2048;an.smoothingTimeConstant=0;ac.createMediaStreamSource(stream).connect(an)}
+function closeMic(){clearInterval(timer);timer=null;mode=null;inSeg=false;frames=[];sp=sil=0;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
+function grab(){const t=new Float32Array(an.fftSize);an.getFloatTimeDomainData(t);let s=0;for(const x of t)s+=x*x;const f=new Float32Array(an.frequencyBinCount);an.getFloatFrequencyData(f);const hz=ac.sampleRate/an.fftSize,b=[];for(let i=0;i<B;i++){const lo=Math.floor(150*Math.pow(26,i/B)/hz),hi=Math.max(lo+1,Math.floor(150*Math.pow(26,(i+1)/B)/hz));let a=0;for(let k=lo;k<hi;k++)a+=Math.max(f[k],-100);b.push(a/(hi-lo))}return{rms:Math.sqrt(s/t.length),b}}
+function feat(fr){const o=[];for(let c=0;c<3;c++){const a=fr.slice(Math.floor(fr.length*c/3),Math.floor(fr.length*(c+1)/3));for(let i=0;i<B;i++)o.push(a.reduce((s,v)=>s+v[i],0)/(a.length||1))}const m=o.reduce((a,b)=>a+b,0)/o.length;return o.map(v=>v-m)}
+function cos(a,b){let d=0,x=0,y=0;for(let i=0;i<a.length;i++){d+=a[i]*b[i];x+=a[i]*a[i];y+=b[i]*b[i]}return d/Math.sqrt(x*y||1)}
+function tick(){const{rms,b}=grab(),now=performance.now(),v=rms>Math.max(floor*3.5,.012)&&now>ignore;
+if(!v&&!inSeg)floor=floor*.95+rms*.05;
+if(v){sil=0;sp++;lastV=now;if(!inSeg&&sp>=3){inSeg=true;frames=[];t0=now}if(inSeg)frames.push(b)}
+else{sp=0;if(inSeg){sil++;frames.push(b);if(sil*30>=S.hold)done()}}}
+function done(){const fr=frames.slice(0,frames.length-sil),dur=lastV-t0;inSeg=false;sil=0;sp=0;if(dur<350||fr.length<6)return;const f=feat(fr);
+if(mode==="rec"){S.tpl={f,dur};save();closeMic();$("rc").textContent="🎙 重錄";render()}
+else if(mode==="cnt"&&S.tpl){const r=dur/S.tpl.dur,sim=cos(f,S.tpl.f),ok=r>.6&&r<1.7&&sim>S.thr/100;$("dbg").textContent="上一遍:相似度 "+sim.toFixed(2)+"、長度比 "+r.toFixed(2)+(ok?" ✓ 計入":" ✗ 唔計");if(ok)add(1)}}
+function add(n){S.count=Math.max(0,Math.min(108,S.count+n));save();render();
+if(n>0&&S.count===108){bell(3);try{navigator.vibrate&&navigator.vibrate([300,150,300,150,300])}catch(e){}closeMic();$("ban").style.display="block";$("go").textContent="再來一圈";$("st").textContent="已完成 108 遍";}
+else if(n>0&&S.count%27===0){bell(1);try{navigator.vibrate&&navigator.vibrate(200)}catch(e){}}}
+$("rc").onclick=async()=>{closeMic();try{await openMic();mode="rec";timer=setInterval(tick,30);$("ts").textContent="🔴 請念一遍…";$("rc").textContent="錄音中"}catch(e){$("rc").textContent="🎙 錄一遍";$("ts").textContent="用唔到咪高峰("+(e&&e.name||"錯誤")+")。請容許麥克風權限,並用 Safari 或 Chrome 直接打開呢個連結,唔好用 app 內置瀏覽器。"}};
+$("go").onclick=async()=>{
+if(S.count>=108){S.count=0;S.rounds++;$("ban").style.display="none";save();render()}
+if(mode==="cnt"){closeMic();$("go").textContent="繼續計數";$("st").textContent="已暫停";return}
+if(!S.tpl){$("st").textContent="請先完成步驟②錄低你自己嘅聲";return}
+closeMic();try{await openMic();mode="cnt";timer=setInterval(tick,30);$("go").textContent="暫停";$("st").textContent="🎧 聆聽緊…";try{navigator.wakeLock&&navigator.wakeLock.request("screen")}catch(e){}}catch(e){$("st").textContent="用唔到咪高峰("+(e&&e.name||"錯誤")+")。請容許權限,並用 Safari 或 Chrome 直接打開。"}};
+$("pl1").onclick=()=>add(1);$("mi").onclick=()=>add(-1);
+$("rs").onclick=()=>{if(confirm("重設計數?")){closeMic();S.count=0;S.rounds=1;$("ban").style.display="none";$("go").textContent="開始計數";$("st").textContent="未開始";save();render()}};
+$("th").oninput=e=>{S.thr=+e.target.value;save();render()};$("hd").oninput=e=>{S.hold=+e.target.value;save();render()};
+$("mn").oninput=e=>{S.mn=e.target.value;save()};$("tx").oninput=e=>{S.tx=e.target.value;save()};
+$("up").onclick=()=>$("fi").click();
+$("fi").onchange=e=>{const f=e.target.files[0];if(f){refUrl=URL.createObjectURL(f);$("rf").textContent="已載入:"+f.name+"(只喺今次開啟時有效)"}};
+$("pl").onclick=()=>{if(refUrl){new Audio(refUrl).play();return}if(!S.tx||!window.speechSynthesis){$("rf").textContent="請先貼上咒文,或者上載錄音。";return}const L=$("lg").value,n=s=>s.replace("_","-").toLowerCase(),v=speechSynthesis.getVoices().find(x=>n(x.lang)===n(L));if(!v){$("rf").textContent="你部機搵唔到"+(L==="zh-CN"?"普通話":"粵語")+"語音。請喺手機設定下載該語音,或者上載錄音。";return}const u=new SpeechSynthesisUtterance(S.tx);u.voice=v;u.lang=v.lang;u.rate=.7;speechSynthesis.cancel();speechSynthesis.speak(u);$("rf").textContent="朗讀緊:"+v.name+"("+v.lang+")"};
+render();
+</script></body></html>
